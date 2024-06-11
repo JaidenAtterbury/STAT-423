@@ -1,0 +1,566 @@
+---
+title: "STAT 423 Homework 3"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Set global options
+knitr::opts_chunk$set(echo = FALSE)
+
+# Load in necessary packages
+library(tidyverse)
+```
+
+1. Two runners: (Marcel and Dani) are put under a cardiac stress test (Conconi test) which involves running on a treadmill. The test is conducted as follows:
+
+  - The athlete warms up for 10 minutes.
+  - The assistant sets the treadmill speed to the runners desired start speed.
+  - The assistant records the heart rate of the runner every 200 meters (.125 miles).
+  - The assistant increases the treadmill speed every 200 meters by 0.5km/hr (0.31 mph).
+  - The assistant stops the stopwatch when the athlete is unable to continue.
+  
+  (a) We first need to preprocess the data. Create a data frame that contains all (non NA) observations of the variables `pulse`, `speed`, and `runner`. The `pulse` is the response and `speed` and `runner` are predictors, where `runner` should be a categorical predictor with the levels "Dani" and "Marcel" (0 and 1). Hint: There should be 39 samples. **Print your processed data frame.**
+
+In this sub-part, we will preprocess the data from the file `runners.RDS`. In particular, we will create a data frame with all of the non $NA$ observations of the `pulse`, `speed`, and `runner` variables. Where `runner` should be a categorical predictor with the levels "Dani" and "Marcel" (0 and 1). In total there should be 39 samples/rows. This data frame will be displayed in its entirety below.
+
+```{r}
+# Read in the data from runners.RDS
+runners_data <- readRDS(file="runners.RDS")
+
+# Filter the data into the correct format
+runners_clean <- runners_data %>%
+                 pivot_longer(cols=c("Dani.Puls", "Marcel.Puls"), names_to="runner", values_to="pulse")  %>%
+                 mutate("runner" = ifelse(runner == "Dani.Puls", 0, 1))  %>%
+                 rename("speed" = "Speed") %>%
+                 na.omit()
+
+# Display the data frame
+runners_clean
+```
+
+As can be seen by the above output, the data frame contains the expected columns, as well as the expected number of samples/rows.
+
+  (b) Print the scatter plot of `pulse` vs. `speed` with different colored points indicating each of the runners. Which model do you think is reasonable in this case?
+  
+In this sub-part, we will print the scatter plot of `pulse` vs. `speed` with different colored points indicating each of the runners. In addition to this, we will also comment on which model is reasonable in this case. The scatter plot of `pulse` vs. `speed` is shown below.
+
+```{r}
+# Make a scatter plot of pulse vs. speed by color
+ggplot(data=runners_clean, mapping=aes(x=speed, y=pulse, color=as.factor(runner))) +
+  geom_point() +
+  scale_color_discrete(name = "Runner Name", labels = c("Dani", "Marcel")) +
+  labs(title="Scatteplot of Pulse vs. Speed Colored by Runner",
+       x="Speed of Treadmill (in km/hr)",
+       y="Heart Rate of the Runner")
+  
+```
+
+As can be seen from the above scatter plot of `pulse` vs. `speed` with different colored points indicating each of the runners, it seems as if a linear regression model is appropriate. However, including the `runner` variable as a covaraiate will be necessary to change the intercept dependent on who the runner is.
+
+  (c) Now fit an OLS regression model: `pulse ~ speed + runner`. What does this model assume with respect to the average starting pulse of each runner? What does it assume about the average increase in pulse for a 1 km/hr increase in speed for each of the two runners.
+  
+In this sub-part, we will fit an OLS regression model: `pulse ~ speed + runner` and interpret what some of the estimated coefficients mean with respect to the problem. The output from the `summary()` function is displayed below.
+
+```{r}
+# Build the OLS model for pulse on speed and runner
+model_1 <- lm(formula=pulse~speed+as.factor(runner), data=runners_clean)
+
+# Display the results of the OLS model
+summary(model_1)
+```
+
+As seen by the above output, with $0/\text{Dani}$ being the reference group for the `runner` variable, the coefficient estimates are $\hat{\beta}_0=66.3510$, $\hat{\beta}_{1}=5.1611$, and $\hat{\beta}_{2}=37.0789$, which are all significant at any reasonable $\alpha$ level (even without any FWER or FDR corrections). 
+
+In terms of the average starting pulse of each runner, the model assumes that, for Dani, his starting pulse is $\hat{\beta}_0=66.3510$, while for Marcel, his starting pulse is $\hat{\beta}_0+\hat{\beta}_{2}=66.3510+37.0789=103.4299$.
+
+In terms of the average increase in pulse for a 1 km/hr increase in speed, the model assumes that, for both runners, the average increase in pulse is $\hat{\beta}_1=5.1611$. This is the same for both runners as there are no interaction terms, and hence, each category only contributes to a different intercept, not slope.
+
+  (d) Perform a residual analysis by plotting the "residuals vs. fitted" plot and the Normal QQ plot. Which model violations can we detect? **State all the assumptions you can check with these plots and whether you think they are satisfied.**
+
+In this sub-part, we will perform a residual analysis of the above model, by plotting the "residuals vs. fitted" plot and the Normal QQ plot. For each plot, we will state all of the assumptions that we can check with these plots and whether we think they are satisfied or not. We will start with the "residuals vs. fitted" plot below.
+
+```{r}
+# Plot the Tukey-Anscombe plot
+plot(model_1, which=1)
+```
+
+In a Tukey-Anscombe/"residuals vs. fitted" plot, one can check two assumptions. These two assumptions are: if $E[\epsilon_i]=0$ is satisfied, and if $Var[\epsilon_i]=\sigma^2$ is satisfied.
+
+Based on the above plot, since the plot does not show a flat scatter around $0$, which is apparent due to the curvature of the loess curve, we have evidence that $E[\epsilon_i]\neq0$. This also indicates the presence of non-linearity/the omission of an important predictor.
+
+Furthermore, based on the above plot, the width of the points is greater in the middle range of the fitted values than it is for the lower and upper range of the fitted values. Thus, we have evidence that there is non-constant variance, that is, $Var[\epsilon_i]\neq\sigma^2$. It is important to note that the width across the ranges isn't drastically different, so this violation of the assumption would need to be tested further.
+
+We will now plot the QQ plot of the residuals below.
+
+```{r}
+# Get the residuals from the model
+residuals <- model_1$residuals
+
+# Display the QQ plot of the residuals
+plot(model_1, which=2)
+```
+
+Although it is possible to check that $E[\epsilon_i]=0$ and $Var[\epsilon_i]=\sigma^2$ assumption with a QQ plot, the main assumption that is checked with a QQ plot is the $\epsilon_i\sim N(0,\sigma^2)$ assumption. If $\epsilon_i\sim N(0,\sigma^2)$, then the ordered standardized residuals $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, should correspond linearly with the quantiles of a standard normal distribution.
+
+Based on the above plot, it is apparent that the ordered standardized residuals, $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, do not correspond linearly with the quantiles of a standard normal distribution. Hence we can see that the normality of the residuals assumption is violated in this model.
+
+  (e) Now, fit a model with an interaction term between `speed` and `runner`. What does this model assume with respect to the average starting pulse of each runner? What does it assume about the average increase in pulse for a 1 km/hr increase in speed for each of the two runners?
+  
+In this sub-part, we will fit an OLS regression model: `pulse ~ speed + runner + speed:runner` and interpret what some of the estimated coefficients mean with respect to the problem. The output from the `summary()` function is displayed below.
+
+```{r}
+# Build the OLS model for pulse on speed and runner
+model_2 <- lm(formula=pulse~speed+as.factor(runner)+speed:as.factor(runner), data=runners_clean)
+
+# Display the results of the OLS model
+summary(model_2)
+```
+
+As seen by the above output, with $0/\text{Dani}$ being the reference group for the `runner` variable, the coefficient estimates are $\hat{\beta}_0=84.2383$, $\hat{\beta}_{1}=4.0932$,  $\hat{\beta}_{2}=2.3722$, and $\hat{\beta}_{3}=2.3138$, the coefficients for the intercept, `speed`, and `speed:runner` are significant at any reasonable $\alpha$ level (even without ant FWER or FDR corrections). While the coefficient for `runner` is not significant at any reasonable $\alpha$ level.
+
+In terms of the average starting pulse of each runner, the model assumes that, for Dani, his starting pulse is $\hat{\beta}_0=84.2383$, while for Marcel, his starting pulse is $\hat{\beta}_0+\hat{\beta}_{2}=84.2383+2.3722=86.6105$.
+
+In terms of the average increase in pulse for a 1 km/hr increase in speed, the model assumes that, for Dani, the average increase in pulse is $\hat{\beta}_1=4.0932$ for a 1 km/hr increase in speed, while for Marcel, the average increase in pulse is $\hat{\beta}_1+\hat{\beta}_3=4.0932+2.3138=6.407$ for a 1 km/hr increase in speed.
+
+  (f) Perform a residual analysis (TA plot and Normal QQ plot) and discuss the model assumptions. **State all the assumptions you can check with these plots and whether you think they are satisfied.**
+
+In this sub-part, we will perform a residual analysis of the model with an interaction, by plotting the "residuals vs. fitted" plot and the Normal QQ plot. For each plot, we will state all of the assumptions that we can check with these plots and whether we think they are satisfied or not. We will start with the "residuals vs. fitted" plot below.
+
+```{r}
+# Plot the Tukey-Anscombe plot
+plot(model_2, which=1)
+```
+
+In a Tukey-Anscombe/"residuals vs. fitted" plot, one can check two assumptions. These two assumptions are: if $E[\epsilon_i]=0$ is satisfied, and if $Var[\epsilon_i]=\sigma^2$ is satisfied.
+
+Based on the above plot, since the plot shows a relatively flat scatter around $0$, which is apparent due to the lack of curvature of the loess curve, we have evidence that the $E[\epsilon_i]=0$ assumption is not violated. It is important to note that, due to the relatively small sample size, there are some parts of this plot that don't seem to follow the random scatter, for the most part this assumption looks good, but more testing would need to be done to confirm this.
+
+Furthermore, based on the above plot, the width of the points seems to be relatively constant across all fitted values. Thus, we have evidence that there is constant variance, that is, $Var[\epsilon_i]=\sigma^2$. Again, it is important to note that, due to the relatively small sample size, there are some parts of this plot that seem to have a narrower width than the rest of the plot, for the most part this assumption looks good, but more testing would need to be done to confirm this.
+
+We will now plot the QQ plot of the residuals below.
+
+```{r}
+# Get the residuals from the model
+residuals <- model_2$residuals
+
+# Display the QQ plot of the residuals
+plot(model_2, which=2)
+```
+
+Although it is possible to check that $E[\epsilon_i]=0$ and $Var[\epsilon_i]=\sigma^2$ assumption with a QQ plot, the main assumption that is checked with a QQ plot is the $\epsilon_i\sim N(0,\sigma^2)$ assumption. If $\epsilon_i\sim N(0,\sigma^2)$, then the ordered standardized residuals $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, should correspond linearly with the quantiles of a standard normal distribution.
+
+Based on the above plot, it is apparent that the ordered standardized residuals, $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, seem to correspond linearly with the quantiles of a standard normal distribution. However, at the lower tail, there seems to be $4$ points that noticeably differentiate themselves from the normal line. Some of these points are deemed as outliers, so more research on these points would need to be done in order to understand why they differ so much. Overall, we can see that, for the most part, the normality of the residuals assumption is not violated in this model.
+
+  (g) Using the full model (with interaction), compute the estimates of the average initial pulse (i.e. when `speed=0`) for each runner, as well as the estimates of the average pulse increase with every additional 1 km/hr in speed (for each runner).
+  
+In this sub-part, although we have already discussed this in part (e), we will compute the estimates of the average initial pulse (i.e. when `speed=0`) for each runner, as well as the estimates of the average pulse increase with every additional 1 km/hr in speed (for each runner).
+
+For Dani, the estimate of his average initial pulse (i.e. when `speed=0`) is $\hat{\beta}_0=84.2383$. Furthermore, the estimate of his average pulse increase with every additional 1 km/hr in speed is $\hat{\beta}_1=4.0932$.
+
+For Marcel, the estimate of his average initial pulse (i.e. when `speed=0`) is $\hat{\beta}_0+\hat{\beta}_{2}=84.2383+2.3722=86.6105$. Furthermore, the estimate of his average pulse increase with every additional 1 km/hr in speed is $\hat{\beta}_1+\hat{\beta}_3=4.0932+2.3138=6.407$.
+
+\newpage
+
+2. The Australian Bureau of Agricultural and Resource Economics conducts an annual survey of the agroindustry. In 1991, 451 farms in New South Wales took part. The raw data is contained in the file `farm.RDS` available on Canvas. The variables have the following meanings.
+
+`revenue`: target variable, total revenue of the farm. $\\$
+`costs`: predictor, total costs of the farm. $\\$
+`region`: predictor, code for different regions within New South Wales. $\\$
+`industry`: predictor, code for the cultivation (1=(wheat), 2=(wheat, sheep, cattle), 3=(sheep), 4=(cattle), 5=(sheep, cattle)).
+
+The aim is to fit a suitable regression model that explains the revenue of a farm. You will need to perform the following steps:
+
+```{r}
+# Read in the data from runners.RDS
+farm_data <- readRDS(file="farm.RDS")
+```
+
+  (a) Preprocess the data as needed, i.e define the necessary factor variables, assess whether transformations are necessary, etc. Check whether there are sufficiently many observations for all levels of the factor variables. The recommendation is that there are at least five observations for each level.
+
+In this sub-part, we will preprocess the data as needed, that is, we will define the necessary factor variables, assess whether transformations are necessary, and check whether there are sufficiently many observations for all levels of the factor variables. In particular, the recommendation is that there are at least five observations for each level. We will start by pre-processing the data below.
+
+```{r}
+# Display the column names
+colnames(farm_data)
+```
+
+As can be seen, the appropriate data attributes are present in the data frame, however, we must convert the `region` and `industry` variables to factors in order to create accurate models when using the `lm()` function. This code is shown below.
+
+```{r, echo=TRUE}
+# Turn the region variable into a factor
+farm_data$region <- as.factor(farm_data$region)
+
+# Turn the industry variable into a factor
+farm_data$industry <- as.factor(farm_data$industry)
+```
+
+We will now assess if any transformations need to be applied. Since `revenue` and `costs` are the only variables where transformations make sense, we will observe a scatter plot of `revenue` versus `costs` in order to see if a transformation is necessary.
+
+```{r}
+# Make a scatter plot of revenue versus costs
+ggplot(data=farm_data, mapping=aes(x=costs, y=revenue)) +
+  geom_point() +
+  labs(title="Scatterplot of Revenue versus Costs",
+       x="Costs",
+       y="Revenue")
+```
+
+Due to these extreme values of `costs` and `revenue`, it appears as if a transformation is necessary in order to account for the large outliers in the data set. Had we made a histogram, we would've came to the conclusion that our data is highly right skewed for both `costs` and `revenue`. This further emphasizes the need to make a transformation.
+
+We will now check whether there are sufficiently many observations for all levels of the factor variables. In particular, the recommendation is that there are at least five observations for each level. This is done below.
+
+```{r}
+# Obtain a count for each region category
+region_count <- farm_data %>%
+                group_by(region) %>%
+                summarise(count = n())
+
+# Display the count by region
+region_count
+```
+
+As can be seen by the above table, each region has over $30$ observations, hence there are sufficiently many observations for all levels of the `region` variable.
+
+```{r}
+# Obtain a count for each industry category
+industry_count <- farm_data %>%
+                  group_by(industry) %>%
+                  summarise(count = n())
+
+# Display the count by industry
+industry_count
+```
+
+As can be seen by the above table, each region has over $37$ observations, hence there are sufficiently many observations for all levels of the `industry` variable.
+
+  (b) Explore the relationship between `revenue` and `costs` and choose a suitable transformation for `revenue` and `costs`. Fit a model that uses the transformed variables, along with `region` and `industry`, and perform a residual analysis (using the TA and QQ plots). Comment on the possible assumption violations. **State all the assumptions you can check with these plots and whether you think they are satisfied**
+
+In this sub-part, we will explore the relationship between `revenue` and `costs` and choose a suitable transformation for `revenue` and `costs`. As was noticed in part (a), there seems to be a heavy right skew in the distribution of `revenue` and `costs`. Thus, even though there is a strong linear relationship between the two variables, the outliers make these relationships hard to detect. In order to scale down these large values, a $log$ transformation might be appropriate. We will make a scatter plot of these transformed variables to assess the appropriateness.
+
+```{r}
+# Make a scatter plot of revenue versus costs
+ggplot(data=farm_data, mapping=aes(x=log(costs), y=log(revenue))) +
+  geom_point() +
+  labs(title="Scatterplot of log(Revenue) versus log(Costs)",
+       x="log(Costs)",
+       y="log(Revenue)")
+```
+
+As can be seen from the above scatter plot of `log(revenue)` versus `log(costs)`, there still appears to be a strong positive linear relationship between the two variables. However, as opposed to the scatter plot of the original variables, this relationship is more discernible with no noticeable outliers. Hence it seems like the $log$ transformation is appropriate.
+
+We will now fit a model that uses the transformed variables, along with `region` and `industry`. This model is fit and shown below.
+
+```{r}
+# Fit the model of log(revenue) versus log(costs), region, and industry
+model_log <- lm(log(revenue)~log(costs)+region+industry, data=farm_data)
+
+# Display the model fit
+summary(model_log)
+```
+
+As can be seen above, based on the F-statistic value of $297.7$ and corresponding p-value of less than $2.2\times10^{-16}$, this model is very significant when compared to the empty model. However, now we will perform a residual analysis, as done below.
+
+We will now perform a residual analysis of the above model, by plotting the "residuals vs. fitted" plot and the Normal QQ plot. For each plot, we will state all of the assumptions that we can check with these plots and whether we think they are satisfied or not. We will start with the "residuals vs. fitted" plot below.
+
+```{r}
+# Plot the Tukey-Anscombe plot
+plot(model_log, which=1)
+```
+
+In a Tukey-Anscombe/"residuals vs. fitted" plot, one can check two assumptions. These two assumptions are: if $E[\epsilon_i]=0$ is satisfied, and if $Var[\epsilon_i]=\sigma^2$ is satisfied.
+
+Based on the above plot, since the plot does shows a flat scatter around $0$, which is apparent due to the lack of curvature in the loess curve, we have evidence that $E[\epsilon_i]=0$.
+
+Furthermore, based on the above plot, the width of the points is greater in the lower and middle range of the fitted values, than it is for the upper range of the fitted values. However, the difference in width is not great, thus we have evidence that there is constant variance, that is, $Var[\epsilon_i]=\sigma^2$. It is important to note that, although the width across the ranges isn't drastically different, there still exists a difference, so this assumption would need to be tested further.
+
+We will now plot the QQ plot of the residuals below.
+
+```{r}
+# Get the residuals from the model
+residuals <- model_log$residuals
+
+# Display the QQ plot of the residuals
+plot(model_log, which=2)
+```
+
+Although it is possible to check that $E[\epsilon_i]=0$ and $Var[\epsilon_i]=\sigma^2$ assumption with a QQ plot, the main assumption that is checked with a QQ plot is the $\epsilon_i\sim N(0,\sigma^2)$ assumption. If $\epsilon_i\sim N(0,\sigma^2)$, then the ordered standardized residuals $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, should correspond linearly with the quantiles of a standard normal distribution.
+
+Based on the above plot, it is apparent that the ordered standardized residuals, $(\hat{\epsilon}_{(1)},\dots,\hat{\epsilon}_{(n)})$, do not correspond linearly with the quantiles of a standard normal distribution, due to the noticeable deviation in the lower tail. Hence we can see that the normality of the residuals assumption is violated in this model. It is important to note that, since only the lower tail deviates from the normal line, it is possible that the normality assumption is met, therefore more testing would need to be done in order to confirm this conclusion.
+
+  (c) What is the expected revenue of a cattle farm. in region 111 with costs of 100,000?
+
+In this sub-part, we will calculate the expected revenue of a cattle farm in region 111 with costs 100,000. We can do this by using the `predict()` function in R. This is done below.
+
+```{r warning=F, message=F}
+# Find the predicted value of revenue
+expected_revenue <- predict(model_log, 
+                            data_frame(region=c(as.factor(111)),
+                                       industry=c(as.factor(4)),
+                                       costs=100000))
+```
+
+As calculated in R above, the expected `log(revenue)` of a cattle farm in region 111 with costs of 100,000 is $11.95063$, however, after exponentiating this `log(revenue)` value, we obtain the expected `revenue` value of $154914.2$
+
+  (d) Test whether `region` has an influence on `revenue` when the other predictors are given at the $1\%$ level.
+
+In this sub-part, we will test whether `region` has an influence on `revenue` when the other predictors are given at the $1\%$ level. We can do this by comparing a model with `region` to the model without region using the `anova()` function in R. This is done below.
+
+```{r}
+# Fit the model of log(revenue) versus log(costs) and industry
+model_log_noregion <- lm(log(revenue)~log(costs)+industry, data=farm_data)
+
+# Run the anova test
+anova(model_log_noregion, model_log)
+```
+
+As can be seen above, due to the p-value of $0.06551$, we fail to reject the null hypothesis that the model with `revenue` is better than the model without `revenue` at the $1\%$ level of significance. Hence we have no significant evidence that `region` has an influence on `revenue` when the other predictors are given.
+ 
+  (e) Add an interaction term between `region` and `industry:` `fit.farm <- lm(log(revenue) ~ log(costs) + region + industry + region:industry, data=farm).`
+
+In this sub-part, we will add an in interaction term between `region` and `industry`. We will refit this new model and show its output using the `summary()` function in R. This is done below.
+
+```{r}
+# Fit the model of log(revenue) with an interaction
+model_log_interaction <- lm(log(revenue)~log(costs)+region+industry+region:industry,
+                            data=farm_data)
+
+# Show a summary of the model fit
+summary(model_log_interaction)
+```
+
+  i. How many parameters are estimated in total?
+
+In this sub-section, we will count the total number of parameters that are estimated. As can be seen above, there are $30$ parameters estimated ($31$ if you include the intercept estimation, and $32$ if you include the variance estimation).
+
+  ii. Is the interaction term significant at the $1\%$ level?
+
+In this sub-section, we will test whether the interaction term is significant/has an influence on `revenue` when the other predictors are given at the $1\%$ level. We can do this by comparing a model with the interaction term to the model without the interaction term using the `anova()` function in R. This is done below.
+
+```{r}
+# Run the anova test
+anova(model_log, model_log_interaction)
+```
+
+As can be seen above, due to the p-value of $0.3404$, we fail to reject the null hypothesis that the model with the interaction term is better than the model without the interaction term at the $1\%$ level of significance. Hence, we have no significant evidence that the interaction term has an influence on `revenue` when the other predictors are given.
+
+  iii. Based on this whole exercise, which model would you choose to predict the revenue of a farm?
+
+In this sub-section, based on this whole exercise, I will decide which model I would choose to predict the revenue of a farm. Due to the fact that we failed to reject the null hypothesis that the interaction term has an influence on `revenue` when the other predictors are given, when compared to the model with no interaction term, I would choose the smaller model (the model from part (b)) to predict the `revenue` of a farm. By choosing this model we save a lot of degrees of freedom that can be used to make our estimates more precise.
+
+\newpage
+ 
+3. Run the following code to create the vectors `x1`, `x2`, and `y`
+`> set.seed(1)` $\\$
+`> n <- 100` $\\$
+`> x1 <- runif(n)` $\\$
+`> x2 <- runif(n,10,20)` $\\$
+`> y <- 2+2*x1+0.3*x2+rnorm(n)` $\\$
+
+```{r}
+# Run the given code from the specification
+set.seed(1)
+n <- 100
+x1 <- runif(n)
+x2 <- runif(n,10,20)
+y <- 2+2*x1+0.3*x2+rnorm(n)
+```
+
+  (a) The last line of the code above corresponds to creating a linear model in which `y` is a function of `x1` and `x2`. Write out the form the linear model. What are the values of the regression coefficients $\beta_0$, $\beta_1$, and $\beta_2$? What is the value of $\sigma^2$?
+
+In this sub-part, we will write out the form the linear model and discern the values of the regression coefficients $\beta_0$, $beta_1$, and $\beta_2$, as well as the value of $\sigma^2$. This is done below.
+
+The linear model that is represented by the line of code `y <- 2+2*x1+0.3*x2+rnorm(n)`, is $y_i=\beta_0+\beta_1x_1+\beta_2x_2+\epsilon_i$. Therefore, the values of the regression coefficients $\beta_0$, $\beta_1$, and $\beta_2$, are $2$, $2$, and $0.3$, respectively. Furthermore, the term `rnorm(n)` tells us the that errors are randomly drawn from a `N(0, 1)` distribution (standard normal). Therefore, we can see that the value of $\sigma^2$ is $1$.
+
+  (b) Use the function `cor()` to calculate the correlation coefficient between `x1` and `x2`. Create a scatter plot using `ggplot2` displaying the relationship between the variables `x1` and `x2`. What can you say about the direction and strength of their relationship.
+  
+In this sub-part, we will use the `cor()` function to calculate the correlation coefficient between `x1` and `x2`, as well as make a scatter plot of these two variables to further analyze the relationship between them, this is done below. 
+
+```{r}
+# Calculate the correlation coefficient between x1 and x2
+correlation <- cor(x1, x2)
+```
+
+As computed in R, the correlation coefficient between `x1` and `x2` is $0.01703215$, which represents a very weak positive linear relationship, thus we expect to see little to no linear relationship between the two variables when making a scatter plot of them. We will use `ggplot2` to make this scatter plot below.
+
+```{r}
+# Make a scatter plot of x1 versus x2
+ggplot(mapping=aes(x=x1, y=x2)) +
+  geom_point() +
+  labs(title="Scatterplot of x1 verus x2",
+       x="Values of x1",
+       y="Values of x2")
+```
+
+As seen by the above scatter plot of `x2` versus `x1`, we have confirmed that there appears to be no linear relationship between the two variables (furthermore, there appears to be no relationship at all). This provides us evidence that there is no multicollinearity between the two predictor variables, which is a good thing.
+
+  (c) Fit a least squares regression to predict `y` using `x1` and `x2`. Describe the obtained results. What are the values of $\hat{\beta}_0$, $\hat{\beta}_1$ and $\hat{\beta}_2$? How do these relate to the true values of $\beta_0$, $\beta_1$ and $\beta_2$? What is the value of $s$ and how does it relate to the true value of $\sigma^2$? Can you reject the null hypothesis $H_0:\beta_1=0$? How about the null hypothesis $H_0:\beta_2=0$?
+  
+In this sub-part, we will fit a least squares regression to predict `y` using `x1` and `x2`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1 and x2
+model_3 <- lm(formula=y~x1+x2)
+
+# Display the results of this model
+summary(model_3)
+```
+
+As can be seen by the above R about from fitting `y~x1+x2`, we can see that we obtained an F-statistic of $50.38$ with a p-value of $9.917\times10^{-16}$, which means that the model is significant when compared to the empty model.
+
+Furthermore, our estimates of $\hat{\beta}_0$, $\hat{\beta}_1$ and $\hat{\beta}_2$, were $1.97628$, $1.93074$ and $0.30144$, respectively. These estimates are close to the true values of $\beta_0$, $\beta_1$ and $\beta_2$, which were $2$, $2$ and $0.3$, respectively.
+
+Also, as computed in R, the value of $s$ is $0.9675158$. This means that $s^2$ is $0.9360869$. These estimates are close to the true values of $\sigma$ and $\sigma^2$, which are both $1$.
+
+Lastly, the p-values associated with $\hat{\beta}_1$ and $\hat{\beta}_2$, were $6.89\times10^{-7}$ and $3.33\times10^{-13}$, respectively. Thus, at any reasonable $\alpha$ level, we reject the null hypotheses $H_0:\beta_1=0$ and $H_0:\beta_2=0$.
+
+  (d) Now fit a least squares regression to predict `y` using only `x1`. Comment on your results. What are the values of $\hat{\beta}_0$ and $\hat{\beta}_1$? How do these relate to the true values of $\beta_0$ and $\beta_1$? What is the value of $s$ and how does it relate to the true value of $\sigma^2$? Cab you reject the null hypothesis $H_0:\beta_1=0$?
+
+In this sub-part, we will fit a least squares regression to predict `y` using `x1`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1
+model_4 <- lm(formula=y~x1)
+
+# Display the results of this model
+summary(model_4)
+```
+
+As can be seen by the above R about from fitting `y~x1`, we can see that we obtained an F-statistic of $17.37$ with a p-value of $6.638\times10^{-5}$, which means that the model is significant when compared to the empty model. However, both the F-statistic and the p-value of this model are less significant than the previous model that included `x2`.
+
+Furthermore, our estimates of $\hat{\beta}_0$ and $\hat{\beta}_1$, were $6.5235$ and $1.9829$, respectively. The estimate for $\hat{\beta}_0$ was not close to the true value of $\beta_0$ which was $2$. However, the estimate for $\hat{\beta}_1$ was close to the true value of $\beta_1$ which was $2$. It seems as if the intercept is compensating for the missing predictor that should be there.
+
+Also, as computed in R, the value of $s$ is $1.266699$. This means that $s^2$ is $1.604525$. These estimates are somewhat close to the true values of $\sigma$ and $\sigma^2$, which are both $1$. However, the estimates for these values are farther from the true value than those for the full model.
+
+Lastly, the p-value associated with $\hat{\beta}_1$ was $6.64\times10^{-5}$. Thus, at any reasonable $\alpha$ level, we reject the null hypothesis $H_0:\beta_1=0$. Due to the fact that the estimate of $\beta_1$ was so close to its true value, we still say that the predictor is significant, even though the model is missing an important predictor.
+
+  (e) Now fit a least squares regression to predict `y` using only `x2`. Comment on your results. What are the values of $\hat{\beta}_0$ and $\hat{\beta}_2$? How do these relate to the true values of $\beta_0$ and $\beta_2$? What is the value of $s$ and how does it relate to the true value of $\sigma^2$? Cab you reject the null hypothesis $H_0:\beta_2=0$?
+
+In this sub-part, we will fit a least squares regression to predict `y` using `x2`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1
+model_5 <- lm(formula=y~x2)
+
+# Display the results of this model
+summary(model_5)
+```
+
+As can be seen by the above R about from fitting `y~x2`, we can see that we obtained an F-statistic of $56.77$ with a p-value of $2.465\times10^{-11}$, which means that the model is significant when compared to the empty model. However, both the F-statistic and the p-value of this model are less significant than the model including both of the predictors. However, the F-statistic and the p-value of this model are more significant than the previous model including only `x1`.
+
+Furthermore, our estimates of $\hat{\beta}_0$ and $\hat{\beta}_2$, were $2.92698$ and $0.30467$, respectively. The estimate for $\hat{\beta}_0$ was somewhat close to the true value of $\beta_0$ which was $2$. However, the estimate for $\hat{\beta}_2$ was close to the true value of $\beta_2$ which was $0.3$. It seems as if the intercept is compensating for the missing predictor that should be there, but not as much as it was in the previous sub-part.
+
+Also, as computed in R, the value of $s$ is $1.09366$. This means that $s^2$ is $1.196093$. These estimates are close to the true values of $\sigma$ and $\sigma^2$, which are both $1$. However, the estimates for these values are farther from the true value than those for the model including both predictors, but are closer to the true value than the model including only `x1`.
+
+Lastly, the p-value associated with $\hat{\beta}_2$ was $2.46\times10^{-11}$. Thus, at any reasonable $\alpha$ level, we reject the null hypothesis $H_1:\beta_2=0$. Due to the fact that the estimate of $\beta_2$ was so close to its true value, we still say that the predictor is significant, even though the model is missing an important predictor. Furthermore, due to the observed differences in the models containing only `x1`, and only `x2`, it appears that `x2` is a more significant and influential predictor as opposed to `x1`.
+
+  (f) Run the following code to create the vectors `x1`, `x2`, and `y`.
+
+`> set.seed(1)` $\\$
+`> n <- 100` $\\$
+`> x1 <- runif(n)` $\\$
+`> x2 <- 0.5*x1+rnorm(n,0,0.01)` $\\$
+`> y <- 2+2*x1+0.3*x2+rnorm(n)` $\\$
+
+Repeat parts (b), (c), (d), and (e) using the new vectors `x1`, `x2` and `y`. What differences do you see between? Explain why these differences occur.
+  
+```{r}
+# Run the given code from the specification
+set.seed(1)
+n <- 100
+x1 <- runif(n)
+x2 <- 0.5*x1+rnorm(n,0,0.01)
+y <- 2+2*x1+0.3*x2+rnorm(n)
+```
+
+In this sub-part, we will repeat parts (b), (c), (d), and (e) using the new vectors `x1`, `x2` and `y`. After which we will compare the differences and explain why these differences occur.
+
+**Repeating part (b):** $\\$  
+We will start off by repeating part (b). To do this, we will use the `cor()` function to calculate the correlation coefficient between `x1` and `x2`, as well as make a scatter plot of these two variables to further analyze the relationship between them, this is done below. 
+
+```{r}
+# Calculate the correlation coefficient between x1 and x2
+correlation <- cor(x1, x2)
+```
+
+As computed in R, the correlation coefficient between `x1` and `x2` is $0.9975904$, which represents a very strong positive linear relationship, thus we expect to see a very strong linear relationship between the two variables when making a scatter plot of them. We will use `ggplot2` to make this scatter plot below.
+
+```{r}
+# Make a scatter plot of x1 versus x2
+ggplot(mapping=aes(x=x1, y=x2)) +
+  geom_point() +
+  labs(title="Scatterplot of x1 versus x2",
+       x="Values of x1",
+       y="Values of x2")
+```
+
+As can be seen from the above scatter plot of `x2` versus `x1`, we have confirmed that there appears to be a strong positive linear relationship between the two variables. This provides us evidence that there is strong multicollinearity between the two predictor variables, which is not a good thing. This multicollinearity is caused by `x2`'s dependence on `x1`.
+
+**Repeating part (c):** $\\$  
+We will now repeat part (c) and fit a least squares regression to predict `y` using `x1` and `x2`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1 and x2
+model_6 <- lm(formula=y~x1+x2)
+
+# Display the results of this model
+summary(model_6)
+```
+
+As can be seen by the above R about from fitting `y~x1+x2`, we can see that we obtained an F-statistic of $12.51$ with a p-value of $1.465\times10^{-5}$, which means the model is significant when compared to the empty model.
+
+Furthermore, our estimates of $\hat{\beta}_0$, $\hat{\beta}_1$ and $\hat{\beta}_2$, were $2.1305$, $-1.7540$ and $7.3967$, respectively. Other than the intercept, these estimates are very different when compared to the true values of $\beta_0$, $\beta_1$ and $\beta_2$, which were $2$, $2$ and $0.3$, respectively. In particular, $\hat{\beta}_1$ underestimates $\beta_1$ by a large amount, and $\hat{\beta}_2$ overestimates $\beta_2$ by an even larger amount.
+
+Also, as computed in R, the value of $s$ is $1.0561788$. This means that $s^2$ is $1.115512$. These estimates are close to the true values of $\sigma$ and $\sigma^2$, which are both $1$.
+
+Lastly, the p-values associated with $\hat{\beta}_1$ and $\hat{\beta}_2$, were $0.760$ and $0.516$, respectively. Thus, at any reasonable $\alpha$ level, we fail to reject the null hypotheses $H_0:\beta_1=0$ and $H_0:\beta_2=0$.
+
+**Repeating part (d):** $\\$
+We will now repeat part (d) and fit a least squares regression to predict `y` using `x1`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1
+model_7 <- lm(formula=y~x1)
+
+# Display the results of this model
+summary(model_7)
+```
+
+As can be seen by the above R about from fitting `y~x1`, we can see that we obtained an F-statistic of $24.74$ with a p-value of $2.795\times10^{-6}$, which means the model is significant when compared to the empty model. However, both the F-statistic and the p-value of this model are more significant than the previous model including both of the predictors.
+
+Furthermore, our estimates of $\hat{\beta}_0$ and $\hat{\beta}_1$, were $2.1172$ and $1.9675$, respectively. These estimates were close to the true values of $\beta_0$ and $\beta_1$, which were $2$ and $2$, respectively. This model produces more accurate estimates due to the lack of multicollinearity now that `x2` is gone.
+
+Also, as computed in R, the value of $s$ is $1.053078$. This means that $s^2$ is $1.108974$. These estimates are close to the true values of $\sigma$ and $\sigma^2$, which are both $1$. These values are closer to the true value than the model with both `x1` and `x2`.
+
+Lastly, the p-value associated with $\hat{\beta}_1$ was $2.79\times10^{-6}$. Thus, at any reasonable $\alpha$ level, we reject the null hypothesis $H_0:\beta_1=0$.
+
+**Repeating part (e):** $\\$
+We will now repeat part (e) and fit a least squares regression to predict `y` using `x2`, and describe the results appearing in the output of the `summary()` function. This is done below.
+
+```{r}
+# Fit an OLS of y on x1
+model_8 <- lm(formula=y~x2)
+
+# Display the results of this model
+summary(model_8)
+```
+
+As can be seen by the above R about from fitting `y~x2`, we can see that we obtained an F-statistic of $25.16$ with a p-value of $2.35\times10^{-06}$, which means the model is significant when compared to the empty model. However, both the F-statistic and the p-value of this model are less significant than the previous model including only `x1`. However, the F-statistic and the p-value of this model are more significant than the model including both predictors.
+
+Furthermore, our estimates of $\hat{\beta}_0$ and $\hat{\beta}_2$, were $2.1199$ and $3.9273$, respectively. The estimate for $\hat{\beta}_0$ was close to the true value of $\beta_0$ which was $2$. However, the estimate for $\hat{\beta}_2$ was not that close to the true value of $\beta_2$ which was $0.3$. It is important to note that, although this estimate of $\beta_2$ isn't great, it is still better than the estimate of $\beta_2$ in the full model.
+
+Also, as computed in R, the value of $s$ is $1.051285$. This means that $s^2$ is $1.051285$. These estimates are close to the true values of $\sigma$ and $\sigma^2$, which are both $1$. These estimates for $s$ and $s^2$ are very comparable to the model with only `x1` (but slightly closer to the true value), and are closer to the true value than the model with both `x1` and `x2`.
+
+Lastly, the p-value associated with $\hat{\beta}_2$ was $2.25\times10^{-6}$. Thus, at any reasonable $\alpha$ level, we reject the null hypothesis $H_1:\beta_2=0$. 
+
+**Conclusions:** $\\$
+As we can see from the output of repeating parts (b)-(e) with the new sample, this problem shows us that multicollinearity can lead to very inaccurate estimates of regression parameters. Since `x1` and `x2` were highly correlated, the standard error of their parameter estimates were very high, which led to small t-statistics and large p-values. This problem was remedied when only `x1` or `x2` were included, though the parameter estimates for the `x1` only model were more accurate than the `x2` only model. In comparison, the original parts (b)-(e) saw estimates that more closely resembled the true parameter values (especially in the full model case), due to the fact that no multicollinearity was present.
+
+  (g) Use `x1`, `x2` and `y` from Part (f) and suppose that we obtain one additional observation, which was unfortunately mismeasured.
+
+`> x1 <- c(x1, 0.1)` $\\$
+`> x2 <- c(x2, 0.8)` $\\$
+`> y <- c(y, 6)` $\\$
+
+Re-fit the linear models from parts (c), (d) and (e) using this new data. What effect does this new observation have on each of the models? In each model, is this observation an outlier? A high-leverage point? Both? Explain your answers.
+
+As mentioned in Canvas messages and during lecture, we are skipping this problem due to the fact that we do not have the proper definitions for leverage points and outliers yet.

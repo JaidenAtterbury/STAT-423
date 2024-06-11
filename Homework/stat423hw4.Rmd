@@ -1,0 +1,300 @@
+---
+title: "STAT 423 Homework 4"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+# Set global options
+knitr::opts_chunk$set(echo = FALSE)
+
+# Read in necessary packages
+library("leaps")
+library("MASS")
+```
+
+1. **Model Selection:** For this problem you will use the file `hw4_problem1.csv`. Using `R`, you will perform 'best subset selection', 'forward step-wise selection', 'backward step-wise selection' and 'bi-direction step-wise selection'.
+
+```{r}
+# Read in the data for problem 1
+hw4_problem1 <- read.csv(file = "hw4_problem1.csv")
+```
+
+  (a) For the 'best subset selection', use Mallow's $C_p$, $AIC$ and $BIC$ to determine the best subset (also state which predictors are selected by each criterion for the best subset).
+
+In this sub-part, for the 'best subset selection' method, we will use the Mallow's $C_p$, $AIC$ and $BIC$ selection criterion to determine the best subset of predictors. In particular, we will state which predictors are selected by each criterion for the best subset. Since the `regsubsets()` function in R cannot compute $AIC$, we will do this by hand. Below is the output from running the `regsubsets()` function, it will give us information on which variables are selected in each model size.
+
+```{r}
+# Get the "best subsets" up to 10 variables
+subsets_output <- regsubsets(Y~., data=hw4_problem1, nvmax=10)
+
+# Save the summary information for later use
+subsets_summary <- summary(subsets_output)
+
+# Display the regsubsets output
+subsets_summary$which
+```
+
+The formatted output of the 'best subset selection' procedure is outputted below for each selection criterion.
+
+```{r}
+# Find the Mallow Cp values for each model size
+cp_values <- summary(subsets_output)$cp
+
+# Find the BIC values for each model size
+bic_values <- summary(subsets_output)$bic
+
+# Find the AIC for each model size
+n <- nrow(hw4_problem1)
+aic_values <- sapply(1:nrow(subsets_summary$which), function(i) {
+  k <- sum(subsets_summary$which[i,])
+  rss <- subsets_summary$rss[i]
+  AIC <- 2*k + n*(1+log(2*pi)) + n*log(rss/n)
+  return(AIC)
+})
+
+# Create a matrix storing the results
+best_subset_values <- cbind(cp_values, aic_values, bic_values)
+
+# Rename the columns and rows for readability
+rownames(best_subset_values) <- c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+colnames(best_subset_values) <- c("Mallow's Cp", "AIC", "BIC")
+
+# Display the matrix
+best_subset_values
+```
+
+As can be seen from the above table, the Mallow's $C_p$, $AIC$ and $BIC$ selection criterion gives the same result; the model with $4$ predictors. Namely, this model includes the intercept, $X1$, $X2$, $X3$, and $X7$.
+
+  (b) State the predictors selected by 'forward, backward and bi-direction step-wise selection`, respectively. 
+  
+In this sub-part, we will use the $AIC$ selection criterion, as well as the 'forward, backward and bi-direction step-wise selection' procedures to select the predictors for a model. This is done using the `step()` function from the `MASS` package below. Due to the fact that all of the methods give the exact same result, I will show the code to show that the different methods were in fact used. We will start with using the 'forward selection' procedure.
+
+```{r eval=FALSE, echo=TRUE}
+# Fit the full model
+fit_full <- lm(Y~., data=hw4_problem1)
+
+# Fit the empty model
+fit_empty <- lm(Y~1, data=hw4_problem1)
+
+# Run the forward selection procedure
+forward <- step(fit_empty, dir="forward", scope=list(upper=fit_full, lower=fit_empty))
+```
+
+```{r include=FALSE, echo=TRUE}
+# Fit the full model
+fit_full <- lm(Y~., data=hw4_problem1)
+
+# Fit the empty model
+fit_empty <- lm(Y~1, data=hw4_problem1)
+
+# Run the forward selection procedure
+forward <- step(fit_empty, dir="forward", scope=list(upper=fit_full, lower=fit_empty))
+```
+
+```{r}
+# Output the coefficients
+forward$coefficients
+```
+
+As selected using AIC, the predictors selected are the intercept, $X1$, $X2$, $X3$, and $X7$. We will now use the 'backward selection' procedure. We already did this in part (a) so we expect to get the same results.
+
+```{r eval=FALSE, echo=TRUE}
+# Run the backward selection procedure
+backward  <- step(fit_full, dir="backward")
+```
+
+```{r include=FALSE, echo=TRUE}
+# Run the backward selection procedure
+backward  <- step(fit_full, dir="backward")
+```
+
+```{r}
+# Output the coefficients
+backward$coefficients
+```
+
+As selected using AIC, the predictors selected are the intercept, $X1$, $X2$, $X3$, and $X7$. These are the same as in part (a), as well as the same selected using 'forward selection'. In fact the parameter estimates are even the same. We will now use the 'bi-direction selection' procedure.
+
+```{r eval=FALSE, echo=TRUE}
+# Run the hybrid selection procedure
+both  <- step(fit_full, dir="both", k=2) 
+```
+
+```{r include=FALSE, echo=TRUE}
+# Run the hybrid selection procedure
+both  <- step(fit_full, dir="both", k=2) 
+```
+
+```{r}
+# Output the coefficients
+both$coefficients
+```
+
+As selected using AIC, the predictors selected are the intercept, $X1$, $X2$, $X3$, and $X7$. These are the same as we found using 'forward and backward selection'. In fact the parameter estimates are even the same. All of the selection procedures so far have selected the intercept, $X1$, $X2$, $X3$, and $X7$ to be included in the "best" model.
+
+  (c) What are the flaws of step-wise selection?
+
+In this sub-part, we will point out the flaws of step-wise selection. As mentioned in the notes, the main reason why forward, backward, and forward-backward hybrid procedures are flawed is because all of these procedures aren't guaranteed to select the best possible model, instead they all find a "local" optimum. Another reason why these selection procedures are flawed, is that they can be very time-consuming/computationally expensive for models with a large number of variables (as I learned when using this function on a model made during the project).
+ 
+  (d) Consider the ten models (full to empty). Which of them achieves the best leave-one-out cross-validation score?
+
+In this sub-part, we will consider the eleven models (full to empty) and determine which of them achieves the best leave-one-out cross-validation score. This will be done using the custom `loocv.lm` function given in the specification. Furthermore, we will use the models recommended by `regsubsest` from part (a). Below we will output the $LOOCV$ scores for the eleven models (full to empty).
+
+```{r}
+# Create the LOOCV function given in the specification
+loocv.lm <- function(mdl) {
+  return(mean((residuals(mdl)/(1-hatvalues(mdl)))^2))
+}
+
+# Create an empty vector to store the LOOCV scores
+loocv_scores <- rep(NA, times=10)
+
+# Find the LOOCV scores for each of the eleven models
+for(i in 1:length(subsets_summary$cp)) {
+  model_formula <- as.formula(paste("Y ~", paste(names(hw4_problem1)[-1][subsets_summary$which[i, -1]], collapse=" + ")))
+  fitted_model <- lm(model_formula, data=hw4_problem1)
+  loocv_scores[i] <- loocv.lm(mdl=fitted_model)
+}
+
+loocv_scores <- matrix(c(0:10, loocv.lm(lm(Y~1, data=hw4_problem1)), loocv_scores), nrow=11, ncol=2)
+
+# Rename the columns of the LOOCV matrix
+colnames(loocv_scores) <- c("Number of Predictors", "LOOCV Scores")
+
+# Display the matrix
+loocv_scores
+```
+
+Based on the above output, the lowest $LOOCV$ score is 1.415879, and corresponds with the model containing 4 predictors (5 parameters). This model in particular corresponds to `Y~X1+X2+X3+X7`, just as we got in all of the previous parts.
+
+  (e) Add the following data point to the data set: `c(10, 5, 8, 4, 0, 1, 0.5, 1, 0.8, 0.9, 1.23)`. Use the above selected model on the new data set containing 84 observations (if the methods gave different, choose one of them arbitrarily). Explore the residuals. Is the newly added point a leverage point and/or an outlier?
+
+In this sub-part, we will add the following data point to the data set: `c(10, 5, 8, 4, 0, 1, 0.5, 1, 0.8, 0.9, 1.23)`. Furthermore, we will use the above selected model on the new data set containing 84 observations and explore the residuals. After this is done, we will decide if the newly added point is a leverage point and/or an outlier. The model we will be using is `Y~X1+X2+X3+X7`, which is the model chosen in part (d).
+
+```{r}
+# Create the new observation
+new_row <- c(10, 5, 8, 4, 0, 1, 0.5, 1, 0.8, 0.9, 1.23)
+
+# Add the new data point to the data set
+hw4_problem1[nrow(hw4_problem1) + 1,] <- new_row
+
+# Refit the model using the new data set and model selected in part (d)
+model_new <- lm(Y~X1+X2+X3+X7, data=hw4_problem1)
+```
+
+Now that the model has been fit we will analyze the residuals to see if the new data point can be considered a leverage point/outlier. To do this we will use the `plot()` function in R to obtain the 'Residuals vs Leverage' plot. This is done below.
+
+```{r}
+# Plot the 'Residuals vs Leverage' figure
+plot(model_new, which=5)
+```
+
+As can be seen above, our new data point, with the index 84, has a high standardized residual, leverage value, and Cook's distance value. Just based on this plot alone, it is safe to say that this new data point is a leverage point and outlier. However, we will do a deeper dive into these values to ensure that they meet the heuristics for a leverage point/outlier.
+
+```{r}
+# Find the residual of the new data point
+stand_resid <- rstandard(model_new)[84]
+
+# Find the leverage point threshold for the data set
+threshold <- 2*(7+1)/nrow(hw4_problem1)
+
+# Find the leverage of the new data point
+leverage <- hatvalues(model_new)[84]
+
+# Find the cooks distance threshold for the data set
+f_val <- qf(0.5, 8, 76)
+
+# Find the Cook's distance of the new data point
+cooks_dist = cooks.distance(model_new)[84]
+```
+
+As computed in R above, the standardized residual of the new data point is `r stand_resid`, which is considered quite a large residual. Furthermore, the leverage threshold is calculated as $2(p+1)/n$, which for this data set is `r threshold`. The leverage of the new data point was calculated as `r leverage`, which is greater than this threshold (in fact it is the only data point with a leverage value above this threshold). The large standardized residual and leverage is quite concerning. Furthermore, the Cook's distance threshold is calculated as $D_i \geq F_{0.5,p+1,n-p-1}$, which for this data set is `r f_val`. The Cook's distance of the new data point is `r cooks_dist`, which is greater than this threshold.
+
+Therefore, based on the diagnostic plot, as well as the numeric thresholds, it is clear that the new data point can be considered an outlier/leverage point.
+
+2. **Logistic Regression for Binary Data:** A car manufacturer instructed a market research company to analyze which families are going to buy a new car next year using a logistic regression model. The data stems from a random sample of 33 families from an agglomeration area. Assessed variables cover the yearly household income (in 1000 US $) and the age of the oldest car in the family (in years). 12 months later, interviewers assessed which families had bought a new car in the meantime. The data is available in the file `car.RDS` on Canvas.
+
+```{r}
+# Read in the data for problem 2
+hw4_problem2 <- readRDS(file = "car.RDS")
+```
+
+  (a) Perform a logistic regression and report the fitted regression equation.
+
+In this sub-part, we will run a logistic regression on the above data and report the fitted regression equation. This regression model will be fit using `glm()` in R.
+
+```{r}
+# Fit the logistic regression model (without an interaction term)
+log_fit_init <- glm(as.factor(purchase)~income+age, family="binomial", data=hw4_problem2)
+
+# Show the model summary
+summary(log_fit_init)
+```
+
+As can be seen from the above R output from the `glm()` function, the fitted regression equation, in terms of $P(Y=1)$, which is the probability of a family buying a new car, is
+\begin{align*}
+P(Y=1) &= \frac{1}{1+e^{4.73931-0.06773x_{\text{income}}-0.59863x_{\text{age}}}}
+\end{align*}
+In terms of the logit function, which represents the log odds ratio of a family buying a new car, the fitted regression equation is
+\begin{align*}
+\log\left(\frac{P(Y=1)}{1-P(Y=1)}\right) &= -4.73931+0.06773x_{\text{income}}+0.59863x_{\text{age}}
+\end{align*}
+Where $P(Y=1)$ is the probability of a family buying a new car.
+
+  (b) Estimate exp($\hat{\beta}_{income}$) and exp($\hat{\beta}_{age}$) and give an interpretation of these estimates.
+
+In this sub-part, we will estimate exp($\hat{\beta}_{income}$) and exp($\hat{\beta}_{age}$) and give an interpretation of these estimates.
+
+As found in the previous sub-part, $\hat{\beta}_{income}$ was $0.06773$, hence we can see that exp($\hat{\beta}_{income}$) is $1.070076$. This parameter represents the change in the odds ratio associated with a one-unit increase in the predictor variable. In the context of the problem, this coefficient represents the change in the odds of a family buying a new car with a one unit increase in the yearly household income, holding the age of the oldest car constant. In particular, as the yearly household income increases by 1000 U.S. dollars (a one unit increase), we estimate that the odds of a family buying a new car increases by a factor of $1.070076$, holding the age of the oldest car constant.
+
+As found in the previous sub-part, $\hat{\beta}_{age}$ was $0.59863$, hence we can see that exp($\hat{\beta}_{income}$) is $1.819624$. This parameter represents the change in the odds ratio associated with a one-unit increase in the predictor variable. In the context of the problem, this coefficient represents the change in the odds of a family buying a new car with a one unit increase in the age of the oldest care, holding the yearly household income constant. In particular, as the age of the oldest car increases by one year (a one unit increase), we estimate that the odds of a family buying a new car increases by a factor of $1.819624$, holding the yearly family income constant.
+
+  (c) How large is the estimated probability that a family with a yearly household income of 50,000 US $ and whose oldest car is 3 years old will buy a new car?
+
+In this sub-part, we will estimate how large the probability is that a family with a yearly household income of 50,000 U.S. dollars and whose oldest car is 3 years old will buy a new car. This will be done using the `predict()` function in R. This is done below.
+
+```{r}
+# Find the predicted value based on the above data
+prediction <- predict(object=log_fit_init, data.frame(income=50, age=3), type="response")
+```
+
+As calculated in R using our logistic regression model, the estimated probability of a family with a yearly household income of 50,000 US $ and whose oldest car is 3 years old buying a new car is `r prediction`.
+ 
+  (d) Check for the presence of points with a large Cook's distance.
+  
+In this sub-part, we will check for the presence of points with a large cooks distance. We will do this using the `cooks.distance()` function, as well as the `plot()` function in R. This is done below.
+
+```{r}
+# Find cooks distance
+cooks_dist <- cooks.distance(model=log_fit_init)
+
+# Plot the cooks distances
+plot(x=log_fit_init, which=4)
+```
+
+As can be seen by the above plot, the values with large Cook's distances relative to the rest of the data, are observation's with the index 9, 20, and 29. Given that the slides covered no heuristics for what constitutes a "large" Cook's distance for a logistic regression model, we will take these three data points as the one's with "large" Cook's distances. In a deeper analysis, we would look at the aspects of these observations that lead to a high Cook's value, and what further actions we should take based on these findings. To do this, we will now analyze the 'Residuals vs Leverage' plot. This is done below.
+
+```{r}
+# Plot the 'Residuals vs Leverage' figure
+plot(x=log_fit_init, which=5)
+```
+
+Based on the above plot, observation 9 has a moderately large residual and a normal leverage value, it is most likely not an outlier. Observation 20 has a normal residual but has a large leverage, this observation is a leverage point, and could be considered an outlier due to that fact (although the normal residual could prevent this outlier designation). Observation 29 has a normal leverage value and a large residual, this observation is most likely an outlier based on certain heuristics.
+
+  (e) Is the predictor `age` significant at the 5% level?
+
+In this problem, we will determine if the predictor `age` is significant at the 5% level. As can be seen from the model fit in sub-part (a), the p-value corresponding to the `age` coefficient was 0.1249. Thus, at the 5% level of significance, we fail to reject the null hypothesis that the coefficient corresponding to the age predictor differs from zero. Thus we have no evidence to say that the age of the oldest car in a family is a significant predictor on if that family will buy a new car within the next year.
+
+  (f) Is there a non-negligible interaction between `income` and `age`?
+
+In this sub-part, we will see if there is a non-negligible interaction between `income` and `age`. To do this we will build a new model with an interaction term between `income` and `age`, and check the p-value associated with the coefficient corresponding to the interaction term. This is done using `glm()` in R below.
+
+```{r}
+# Fit the logistic regression model (without an interaction term)
+log_fit_inter <- glm(as.factor(purchase)~income+age+income:age, family="binomial", data=hw4_problem2)
+
+# Show the model summary
+summary(log_fit_inter)
+```
+
+As can be seen from the above R output from the `glm()` function, the p-value corresponding to the coefficient of the interaction between `income` and `age` was 0.276. Thus, at the 5% level of significance, we fail to reject the null hypothesis that the coefficient corresponding to the interaction between `income` and `age` differs from zero. Thus we have no evidence to say that there a non-negligible interaction between `income` and `age`.
